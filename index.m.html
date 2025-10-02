@@ -309,7 +309,7 @@ async function dealRound(){
     btnReveal.classList.remove('disabled');
     hintText.textContent = '已發完 6 回合 — 可按「閃亮亮」揭示黑牌';
   } else {
-    hintText.textContent = `完成回合 ${currentRound} — 還需 ${6-currentRound} 回合`;
+    hintText.textContent = `請出「負號」扭轉戰局 ${currentRound} — 還需 ${6-currentRound} 回合`;
   }
   busy = false;
 }
@@ -407,7 +407,7 @@ function autoMarkWinners(){
     row.classList.add('winner');
     playWinnerEffectMobile(row);
   });
-  hintText.textContent = `結算完成 — 勝者已標示`;
+  hintText.textContent = `結算完成 — 按下「救護車」清掃鬥技場`;
 }
 
 /* clear winner marks */
@@ -479,7 +479,7 @@ function restart(){
   btnReveal.classList.add('disabled');
   btnSettle.classList.add('disabled');
   showPlaceholder();
-  hintText.textContent = '已重置 — 按「救護車」開始';
+  hintText.textContent = '已重置 — 按「骰子」開始';
 }
 
 /* attach control events (touch-friendly) */
