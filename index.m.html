@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>行動版 — 角色戰力練習</title>
+<style>
+  :root{
+    --card-w:38px;
+    --card-h:58px;
+    --row-pad:12px;
+    --accent:#2563eb;
+    --gold:#f6c84a;
+    --muted:#6b7280;
+  }
+  /* --- reset & layout --- */
+  html,body{height:100%;margin:0;font-family:"Microsoft JhengHei",system-ui,Arial;background:linear-gradient(180deg,#f7fbff,#eef6ff);color:#0f172a}
+  .app{display:flex;flex-direction:column;height:100vh;max-width:420px;margin:0 auto;border-left:1px solid rgba(0,0,0,0.02);border-right:1px solid rgba(0,0,0,0.02);box-shadow:0 8px 30px rgba(2,6,23,0.03)}
+  header{padding:14px 14px 8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:transparent}
+  h1{margin:0;font-size:16px;font-weight:800}
+  .subtitle{font-size:12px;color:var(--muted)}
+  main{flex:1;overflow:auto;padding:8px 12px 120px 12px} /* leave space for bottom controls */
+  .hint{font-size:12px;color:var(--muted);text-align:center;margin-bottom:8px}
+
+  /* --- character rows (vertical stack) --- */
+  #chars{display:flex;flex-direction:column;gap:12px;align-items:stretch}
+  .char-row{background:#fff;border-radius:12px;padding:var(--row-pad);display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 20px rgba(2,6,23,0.06);position:relative;overflow:visible}
+  .char-top{display:flex;align-items:center;gap:10px}
+  .char-index{width:36px;height:36px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:800;color:#111;flex-shrink:0;font-size:14px}
+  .char-info{display:flex;flex-direction:column}
+  .char-name{font-weight:800;font-size:14px}
+  .char-stats{font-size:12px;color:var(--muted)}
+  .cards{display:flex;gap:8px;align-items:center;justify-content:flex-start;min-height:var(--card-h);overflow-x:auto;padding-bottom:6px}
+  .cards::-webkit-scrollbar{height:8px}
+  .cards::-webkit-scrollbar-thumb{background:rgba(15,23,42,0.08);border-radius:8px}
+
+  /* --- card visuals --- */
+  .card{min-width:var(--card-w);height:var(--card-h);border-radius:10px;background:white;border:1px solid #c7dbff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:#0f172a;cursor:pointer;box-shadow:0 8px 16px rgba(2,6,23,0.06);transform-style:preserve-3d;backface-visibility:hidden;flex-shrink:0;padding:4px}
+  .card.back{background:linear-gradient(180deg,#e6f0ff,#cfe0ff);color:transparent;border:1px solid #bcd1ff}
+  .card.black{background:#0b0b0b;border:0;color:transparent;box-shadow:none;cursor:default}
+  .card.anim{pointer-events:none}
+  .final-card{min-width:84px;height:var(--card-h);border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff1d6);border:2px solid #ffdca8;font-weight:900;font-size:16px;display:flex;align-items:center;justify-content:center;margin-left:8px;box-shadow:0 10px 26px rgba(245,158,11,0.12)}
+  .final-row{display:flex;gap:8px;align-items:center;margin-top:6px}
+
+  /* --- entrance animation used on spawn --- */
+  .enter{opacity:0;transform:translateY(-40px) scale(.98)}
+  .enter.show{animation: enterDrop .56s cubic-bezier(.2,.9,.3,1) forwards}
+  @keyframes enterDrop{0%{opacity:0;transform:translateY(-40px) scale(.98)} 65%{opacity:1;transform:translateY(6px) scale(1.02)} 100%{opacity:1;transform:translateY(0) scale(1)}}
+
+  /* --- winner & particle effects --- */
+  .char-row.winner{outline:5px solid rgba(245,158,11,0.12);box-shadow:0 18px 48px rgba(245,158,11,0.12)}
+  .particle-layer{position:absolute;inset:0;pointer-events:none}
+  .particle{position:absolute;border-radius:50%}
+  .ripple{position:absolute;left:50%;top:20%;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 2px rgba(255,210,90,0.12)}
+
+  /* --- bottom fixed control bar for mobile --- */
+  .control-bar{position:fixed;left:0;right:0;bottom:0;background:linear-gradient(180deg,#ffffff,#f3f6fb);padding:8px 10px;border-top:1px solid rgba(2,6,23,0.04);display:flex;align-items:center;justify-content:space-around;gap:10px;z-index:1200}
+  .control-btn{width:56px;height:56px;border-radius:12px;background:#fff;border:0;box-shadow:0 8px 26px rgba(2,6,23,0.06);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;position:relative;touch-action:manipulation}
+  .control-btn.disabled{opacity:.4;pointer-events:none}
+  .control-label{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.9);color:#fff;padding:6px 8px;border-radius:8px;font-size:12px;white-space:nowrap;opacity:0;transition:opacity .12s}
+  .control-btn:active{transform:translateY(2px)}
+  .control-btn.show-tip .control-label{opacity:1}
+
+  /* info button */
+  .info-fab{position:fixed;right:14px;bottom:86px;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;z-index:1300;box-shadow:0 12px 36px rgba(2,6,23,0.12);font-weight:800}
+
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:none;align-items:center;justify-content:center;z-index:1400}
+  .modal .content{width:92%;max-width:420px;background:#fff;color:#0f172a;padding:14px;border-radius:12px;box-shadow:0 18px 60px rgba(2,6,23,0.18);font-size:14px}
+  .close-x{float:right;cursor:pointer}
+
+  /* responsive tweaks for very small screens */
+  @media (min-width:420px){
+    .app{max-width:420px}
+  }
+  @media (max-height:640px){
+    .control-label{bottom:62px}
+  }
+</style>
+</head>
+<body>
+  <div class="app" role="application">
+    <header>
+      <div>
+        <h1>哥布林也能屠龍？！</h1>
+        <div class="subtitle">下好離手，單押翻盤</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="btnBattleTop" class="control-btn" title="出賽">🎲
+          <div class="control-label">出賽</div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="hint" id="hintText">按「骰子」從 7 位角色隨機抽 4 位並進場</div>
+      <div id="chars"></div>
+    </main>
+
+    <!-- fixed bottom controls -->
+    <div class="control-bar" aria-hidden="false">
+      <div id="btnBattle" class="control-btn" title="出賽">🎲<div class="control-label">出賽</div></div>
+      <div id="btnDeck" class="control-btn" title="發牌">🃏<div class="control-label">牌堆（發本回合）</div></div>
+      <div id="btnReveal" class="control-btn disabled" title="揭示">✨<div class="control-label">揭示</div></div>
+      <div id="btnSettle" class="control-btn disabled" title="結算">🎉<div class="control-label">結算</div></div>
+      <div id="btnRestart" class="control-btn" title="重新開始">🚑<div class="control-label">重新開始</div></div>
+    </div>
+
+    <div class="info-fab" id="infoFab">i</div>
+
+    <div class="modal" id="modal" role="dialog" aria-modal="true">
+      <div class="content">
+        <div class="close-x" id="closeModal">✕</div>
+        <h3>遊戲規則</h3>
+        <ol>
+          <li>「骰子」：7 位鬥士隨機選 4 位進場（初始戰力越高、賞金越低）。</li>
+          <li>各玩家「秘密選擇」1~3位鬥士下注，最終戰力最高者獲勝，並發配該鬥士賞金給下注玩家</li>
+          <li>選擇1/2/3位下注：該勝者賞金*2/*1/*0.5。</li>
+          <li>「牌堆」：隨機將 4 張數字牌發給 4 位鬥士（各一張），並算作一回合（共 6 回合）。</li>
+          <li>數字牌包含-6~+6，以及黑牌（特殊牌），角色持牌的加總即最終戰力。</li>
+          <li>每位玩家都有「玩家總數-1次」的「負號」可作使用，點擊使當回合任一數字牌變為相反數。</li>
+          <li>系統將確保每位鬥士至少一張黑牌（不可被「負號」）。</li>
+          <li>如果你想，可重複對同一張數字牌使用「負號」，促成玩家之間的策略競爭。</li>
+          <li>「閃亮亮」：揭示黑牌，並鎖定場上所有數字牌不可再干涉。</li>
+          <li>「拉炮」：系統將自動加總結算最終戰力決出勝者，並發配賞金。</li>
+          <li>「救護車」：重置競技場，遊戲共進行三次出賽，並由贏得最多賞金的玩家獲勝</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ====== reuse desktop logic but adapted for mobile layout ====== */
+const ROLE_POOL = [
+  { name:'路邊野草', power:0, bounty:10 },
+  { name:'勇者之劍(未拔出)', power:1, bounty:7 },
+  { name:'棒槌哥布林', power:2, bounty:6 },
+  { name:'新手勇者', power:3, bounty:5 },
+  { name:'巨魔長老', power:4, bounty:4 },
+  { name:'高等精靈', power:5, bounty:3 },
+  { name:'滅世虹龍', power:8, bounty:2 }
+];
+
+const charsContainer = document.getElementById('chars');
+const hintText = document.getElementById('hintText');
+const btnBattle = document.getElementById('btnBattle');
+const btnBattleTop = document.getElementById('btnBattleTop');
+const btnDeck = document.getElementById('btnDeck');
+const btnReveal = document.getElementById('btnReveal');
+const btnSettle = document.getElementById('btnSettle');
+const btnRestart = document.getElementById('btnRestart');
+const infoFab = document.getElementById('infoFab');
+const modal = document.getElementById('modal');
+const closeModal = document.getElementById('closeModal');
+
+let players = []; // {role,index,cards:[{value,isBlack,el}],forcedBlackRound,el}
+let currentRound = 0;
+let revealed = false;
+let settleIndex = 0;
+let busy = false;
+
+/* helpers */
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function randNonZero6(){ let n; do{ n = randInt(-6,6); } while(n===0); return n; }
+function shuffle(a){ return a.slice().sort(()=>Math.random()-0.5); }
+
+/* initialize placeholder */
+function showPlaceholder(){
+  charsContainer.innerHTML = '';
+  const ph = document.createElement('div');
+  ph.className = 'char-row';
+  ph.innerHTML = `<div style="text-align:center;color:var(--muted);padding:18px">尚未出賽。按下方「骰子」開始。</div>`;
+  charsContainer.appendChild(ph);
+  hintText.textContent = '按「骰子」從 7 位角色隨機抽 4 位並進場';
+}
+
+/* spawn 4 players (出賽) */
+function doBattle(){
+  if (busy) return;
+  // reset
+  charsContainer.innerHTML = '';
+  players = [];
+  currentRound = 0;
+  revealed = false;
+  settleIndex = 0;
+  busy = false;
+  btnReveal.classList.add('disabled'); btnSettle.classList.add('disabled');
+  hintText.textContent = '角色進場中…';
+
+  const picked = shuffle(ROLE_POOL).slice(0,4);
+  for (let i=0;i<4;i++){
+    const forced = randInt(0,3);
+    const pl = { role: picked[i], index: i+1, cards: [], forcedBlackRound: forced, el: null };
+    players.push(pl);
+  }
+
+  // create rows and animate entry
+  players.forEach((pl, idx) => {
+    const row = document.createElement('div');
+    row.className = 'char-row enter';
+    row.dataset.idx = pl.index-1;
+    row.innerHTML = `
+      <div class="char-top">
+        <div class="char-index">${pl.index}</div>
+        <div class="char-info">
+          <div class="char-name">${pl.role.name}</div>
+          <div class="char-stats">戰力：${pl.role.power} ； 賞金：${pl.role.bounty}</div>
+        </div>
+      </div>
+      <div class="cards" id="cards-${pl.index}"></div>
+      <div class="final-row" id="final-${pl.index}"></div>
+      <div class="particle-layer"></div>
+    `;
+    charsContainer.appendChild(row);
+    pl.el = row;
+
+    // staggered entrance
+    setTimeout(()=>{
+      row.classList.add('show');
+      row.classList.remove('enter');
+    }, idx * 220);
+  });
+
+  // after entrance done
+  setTimeout(()=> {
+    hintText.textContent = '出賽完成 — 下注完成可按「牌堆」開始發牌（共 6 回合）';
+  }, 900);
+}
+
+/* deal one round (one press) */
+async function dealRound(){
+  if (busy) return;
+  if (players.length === 0) {
+    hintText.textContent = '請先按「骰子」選出 4 位鬥士出賽';
+    return;
+  }
+  if (currentRound >= 6) {
+    hintText.textContent = '已完成 6 回合發牌，請按「閃亮亮」揭示黑牌';
+    return;
+  }
+  busy = true;
+  hintText.textContent = `發牌中（回合 ${currentRound+1}）…`;
+
+  const order = shuffle([0,1,2,3]);
+  const deckRect = btnDeck.getBoundingClientRect();
+
+  for (let k=0;k<order.length;k++){
+    const i = order[k];
+    const pl = players[i];
+
+    // decide black
+    let isBlack = false;
+    if (pl.forcedBlackRound === currentRound) isBlack = true;
+    else if (Math.random() < 0.20) isBlack = true;
+    const value = isBlack ? null : randNonZero6();
+
+    // flying clone (back visual)
+    const fly = document.createElement('div');
+    fly.className = 'card flying back';
+    fly.style.width = getComputedStyle(document.documentElement).getPropertyValue('--card-w') || '48px';
+    fly.style.height = getComputedStyle(document.documentElement).getPropertyValue('--card-h') || '68px';
+    fly.style.left = (deckRect.left + deckRect.width/2 - 28) + 'px';
+    fly.style.top = (deckRect.top + deckRect.height/2 - 34) + 'px';
+    fly.style.borderRadius = '10px';
+    fly.style.zIndex = 9999;
+    document.body.appendChild(fly);
+
+    // target
+    const container = document.getElementById(`cards-${pl.index}`);
+    const contRect = container.getBoundingClientRect();
+    const cardW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 48;
+    const gap = 8;
+    const offsetLeft = contRect.left + container.children.length * (cardW + gap) + 6;
+    const offsetTop = contRect.top + (contRect.height - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-h'))||68))/2;
+
+    // animate flight (scaled for mobile)
+    const rot = (Math.random()-0.5)*12;
+    requestAnimationFrame(()=> {
+      fly.style.transition = 'all 640ms cubic-bezier(.2,.9,.2,1)';
+      fly.style.left = offsetLeft + 'px';
+      fly.style.top = offsetTop + 'px';
+      fly.style.transform = `rotate(${rot}deg) scale(0.98)`;
+    });
+
+    await new Promise(r => setTimeout(r,660));
+    fly.remove();
+
+    // actual card
+    const cardEl = document.createElement('div');
+    cardEl.className = isBlack ? 'card black' : 'card';
+    cardEl.textContent = isBlack ? '' : value;
+    const cardObj = { value: isBlack ? null : value, isBlack: isBlack, el: cardEl };
+    pl.cards.push(cardObj);
+    container.appendChild(cardEl);
+
+    if (!isBlack){
+      cardEl.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (revealed) return;
+        flipNumericPreReveal(cardEl, cardObj);
+      });
+    }
+
+    await new Promise(r => setTimeout(r,90));
+  }
+
+  currentRound++;
+  if (currentRound >= 6){
+    btnReveal.classList.remove('disabled');
+    hintText.textContent = '已發完 6 回合 — 可按「閃亮亮」揭示黑牌';
+  } else {
+    hintText.textContent = `完成回合 ${currentRound} — 還需 ${6-currentRound} 回合`;
+  }
+  busy = false;
+}
+
+/* flip numeric pre-reveal (3D) */
+function flipNumericPreReveal(cardEl, cardObj){
+  if (cardObj.isBlack) return;
+  if (cardEl.classList.contains('anim')) return;
+  cardEl.classList.add('anim');
+  cardEl.style.transition = 'transform 180ms ease';
+  cardEl.style.transform = 'rotateY(90deg)';
+  setTimeout(()=>{
+    cardObj.value = -cardObj.value;
+    cardEl.textContent = cardObj.value;
+    cardEl.style.transform = 'rotateY(0deg)';
+    setTimeout(()=>{ cardEl.style.transition=''; cardEl.classList.remove('anim'); },220);
+  },190);
+}
+
+/* reveal black cards */
+async function doReveal(){
+  if (currentRound < 6) {
+    hintText.textContent = '請先完成 6 回合發牌';
+    return;
+  }
+  if (busy) return;
+  busy = true;
+  btnReveal.classList.add('disabled');
+  hintText.textContent = '揭示中...';
+
+  for (let pi=0; pi<players.length; pi++){
+    const pl = players[pi];
+    const container = document.getElementById(`cards-${pl.index}`);
+    for (let j=0;j<pl.cards.length;j++){
+      const cd = pl.cards[j];
+      const el = cd.el;
+      if (cd.isBlack){
+        el.style.transition = 'transform 220ms ease';
+        el.style.transform = 'rotateY(90deg)';
+        await new Promise(r=>setTimeout(r,240));
+        cd.value = randNonZero6();
+        cd.isBlack = false;
+        el.classList.remove('black');
+        el.textContent = cd.value;
+        el.style.transform = 'rotateY(0deg)';
+        await new Promise(r=>setTimeout(r,220));
+      } else {
+        el.animate([{transform:'scale(1)'},{transform:'scale(1.04)'},{transform:'scale(1)'}],{duration:180});
+        await new Promise(r=>setTimeout(r,90));
+      }
+    }
+    await new Promise(r=>setTimeout(r,140));
+  }
+
+  revealed = true;
+  btnSettle.classList.remove('disabled');
+  hintText.textContent = '揭示完成 — 可按「拉炮」逐位結算總戰力';
+  busy = false;
+}
+
+/* settle once (reveal final card) */
+function doSettleOnce(){
+  if (!revealed) { hintText.textContent = '請先按「閃亮亮」進行黑牌揭示'; return; }
+  if (busy) return;
+  if (settleIndex >= players.length) return;
+  const pl = players[settleIndex];
+  const finalTarget = document.getElementById(`final-${pl.index}`);
+  const base = pl.role.power;
+  const sum = pl.cards.reduce((s,cd)=> s + (typeof cd.value === 'number' ? cd.value : 0), base);
+  const final = document.createElement('div');
+  final.className = 'final-card';
+  final.textContent = sum;
+  finalTarget.appendChild(final);
+  settleIndex++;
+  hintText.textContent = `已結算 ${settleIndex}/${players.length}`;
+  if (settleIndex >= players.length){
+    btnSettle.classList.add('disabled');
+    setTimeout(()=> autoMarkWinners(), 300);
+  }
+}
+
+/* determine winners & play effects (scaled for mobile) */
+function autoMarkWinners(){
+  let max = -Infinity;
+  players.forEach(pl=>{
+    const total = pl.cards.reduce((s,cd)=> s + (typeof cd.value === 'number' ? cd.value : 0), pl.role.power);
+    if (total > max) max = total;
+  });
+  const winners = players.filter(pl=>{
+    const total = pl.cards.reduce((s,cd)=> s + (typeof cd.value === 'number' ? cd.value : 0), pl.role.power);
+    return total === max;
+  });
+  winners.forEach(w=>{
+    const row = w.el;
+    row.classList.add('winner');
+    playWinnerEffectMobile(row);
+  });
+  hintText.textContent = `結算完成 — 勝者已標示`;
+}
+
+/* clear winner marks */
+function clearWinnerMarks(){
+  document.querySelectorAll('.char-row').forEach(el=> el.classList.remove('winner'));
+}
+
+/* scaled winner effect for mobile */
+function playWinnerEffectMobile(rowEl){
+  const layer = rowEl.querySelector('.particle-layer');
+  if (!layer) return;
+  const colors = ['#ffd166','#ff6b6b','#6bc1ff','#b388ff','#7ee787','#ff9f1c','#ffd1dc'];
+  const rect = rowEl.getBoundingClientRect();
+  const cx = rect.width*0.5, cy = rect.height*0.2;
+
+  // fewer particles for mobile
+  for (let i=0;i<28;i++){
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = 6 + Math.random()*10;
+    p.style.width = p.style.height = size + 'px';
+    p.style.left = cx + 'px';
+    p.style.top = cy + 'px';
+    p.style.background = colors[Math.floor(Math.random()*colors.length)];
+    layer.appendChild(p);
+    const angle = Math.random()*Math.PI*2;
+    const dist = 60 + Math.random()*120;
+    const dx = Math.cos(angle)*dist;
+    const dy = Math.sin(angle)*dist;
+    p.animate([{ transform:'translate(0,0) scale(1)', opacity:1 }, { transform:`translate(${dx}px,${dy}px) scale(.5)`, opacity:0 }], { duration:900+Math.random()*700, easing:'cubic-bezier(.2,.9,.2,1)' });
+    setTimeout(()=> p.remove(), 1200 + Math.random()*400);
+  }
+
+  // ripple effect
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple';
+  ripple.style.width = '10px'; ripple.style.height = '10px';
+  ripple.style.boxShadow = '0 0 0 2px rgba(255,210,90,0.16)';
+  layer.appendChild(ripple);
+  ripple.animate([{ transform:'translate(-50%,-50%) scale(.6)', opacity:0.9 }, { transform:'translate(-50%,-50%) scale(2.6)', opacity:0 }], { duration:1000, easing:'cubic-bezier(.2,.9,.2,1)' });
+  setTimeout(()=> ripple.remove(), 1100);
+
+  // light confetti (few)
+  for (let i=0;i<12;i++){
+    const conf = document.createElement('div');
+    conf.style.position='fixed';
+    conf.style.left = (10 + Math.random()*80) + 'vw';
+    conf.style.top = '-6vh';
+    conf.style.width = (6 + Math.random()*6) + 'px';
+    conf.style.height = (10 + Math.random()*8) + 'px';
+    conf.style.background = colors[Math.floor(Math.random()*colors.length)];
+    conf.style.transform = `rotate(${Math.random()*360}deg)`;
+    conf.style.zIndex = 1200;
+    conf.style.borderRadius = '2px';
+    document.body.appendChild(conf);
+    const fallDur = 1400 + Math.random()*1600;
+    conf.animate([{ transform:'translateY(0) rotate(0deg)', opacity:1 }, { transform:`translateY(110vh) rotate(${360+Math.random()*720}deg)`, opacity:0 }], { duration: fallDur, easing:'linear' });
+    setTimeout(()=> conf.remove(), fallDur + 200);
+  }
+}
+
+/* restart resets state and shows placeholder */
+function restart(){
+  busy = false;
+  players = [];
+  currentRound = 0;
+  revealed = false;
+  settleIndex = 0;
+  btnReveal.classList.add('disabled');
+  btnSettle.classList.add('disabled');
+  showPlaceholder();
+  hintText.textContent = '已重置 — 按「救護車」開始';
+}
+
+/* attach control events (touch-friendly) */
+btnBattle.addEventListener('click', doBattle);
+btnBattleTop.addEventListener('click', doBattle);
+btnDeck.addEventListener('click', dealRound);
+btnReveal.addEventListener('click', ()=> { if (!btnReveal.classList.contains('disabled')) doReveal(); });
+btnSettle.addEventListener('click', ()=> { if (!btnSettle.classList.contains('disabled')) doSettleOnce(); });
+btnRestart.addEventListener('click', restart);
+
+infoFab.addEventListener('click', ()=> modal.style.display = 'flex');
+closeModal.addEventListener('click', ()=> modal.style.display = 'none');
+window.addEventListener('click', (e)=> { if (e.target === modal) modal.style.display = 'none'; });
+
+/* boot mobile placeholder */
+showPlaceholder();
+
+</script>
+</body>
+</html>
